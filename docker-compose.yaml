@@ -74,6 +74,8 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - /containers/GameData:/GameData
+    - /var/run/docker.sock:/var/run/docker.sock
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -83,6 +85,14 @@ x-airflow-common:
       condition: service_healthy
 
 services:
+  docker-proxy:
+    image: bobrik/socat
+    command: "TCP4-LISTEN:2375,fork,reuseaddr UNIX-CONNECT:/var/run/docker.sock"
+    ports:
+      - "2376:2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
   postgres:
     image: postgres:13
     environment:
@@ -97,6 +107,10 @@ services:
       retries: 5
       start_period: 5s
     restart: always
+    ports:
+      - 5432:5432
+    expose:
+      - 5432
 
   redis:
     image: redis:latest
@@ -154,6 +168,8 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       <<: *airflow-common-env
       # Required to handle warm shutdown of the celery workers properly
